@@ -1,7 +1,6 @@
 from setuptools import setup, find_packages
 
-version = '0.1.3'
-
+version = '0.1.4'
 with open('README.md', encoding='utf-8') as f:
     long_description = f.read()
 
@@ -15,8 +14,9 @@ setup(
     author='Victor Golovanenko',
     author_email='drygdryg2014@yandex.com',
     url='https://github.com/drygdryg/netbox-plugin-device-map',
-    download_url='https://github.com/drygdryg/netbox-plugin-device-map/archive/v{}.zip'.format(version),
-    python_requires='>3.9',
+    download_url=f'https://github.com/drygdryg/netbox-plugin-device-map/archive/v{version}.zip',
+    python_requires='>=3.10',
+    install_requires=['netbox>=4.0'],
     classifiers=[
         'Environment :: Plugins',
         'Environment :: Web Environment',
