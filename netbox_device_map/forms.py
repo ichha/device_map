@@ -1,12 +1,9 @@
 from django import forms
-
-from dcim.models import DeviceRole, Device
+from dcim.models import DeviceRole
 from ipam.models import VLANGroup, VLAN
-from netbox.forms import NetBoxModelForm  # For model forms
 from utilities.forms.fields import DynamicModelChoiceField, DynamicModelMultipleChoiceField
 
-
-class DeviceMapFilterForm(forms.Form):  # Removed BootstrapMixin
+class DeviceMapFilterForm(forms.Form):
     vlan_group = DynamicModelChoiceField(
         queryset=VLANGroup.objects.all(),
         required=False,
@@ -32,8 +29,7 @@ class DeviceMapFilterForm(forms.Form):  # Removed BootstrapMixin
         initial=True
     )
 
-
-class ConnectedCpeForm(forms.Form):  # No change needed here
+class ConnectedCpeForm(forms.Form):
     vlan = forms.ModelChoiceField(
         queryset=VLAN.objects.all(),
         required=False
