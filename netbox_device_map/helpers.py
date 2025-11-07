@@ -26,7 +26,7 @@ def get_connected_devices(device: Device, vlan: VLAN = None) -> QuerySet[Device]
     included_interfaces = device.interfaces.all()
     if vlan is not None:
         included_interfaces = included_interfaces.filter(Q(untagged_vlan=vlan) | Q(tagged_vlans=vlan))
-    if NETBOX_VERSION < version.parse('3.3.0'):
+    if NETBOX_VERSION < version.parse('4.4.4'):
         return Device.objects.filter(interfaces___link_peer_id__in=included_interfaces)
     else:
         return Device.objects.filter(
@@ -36,7 +36,7 @@ def get_connected_devices(device: Device, vlan: VLAN = None) -> QuerySet[Device]
 
 def are_devices_connected(device_a: Device, device_b: Device) -> bool:
     """Determines whether devices are connected to each other by a direct connection"""
-    if NETBOX_VERSION < version.parse('3.3.0'):
+    if NETBOX_VERSION < version.parse('4.4.4'):
         queryset = Device.objects.filter(interfaces___link_peer_id__in=device_a.interfaces.all(), id=device_b.id)
     else:
         queryset = Device.objects.filter(
