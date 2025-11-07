@@ -5,7 +5,7 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.generic import View
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Q, Prefetch
+from django.db.models import Q
 from . import forms
 from .geographical_map import configure_leaflet_map
 from .helpers import get_device_location, get_connected_devices
@@ -28,7 +28,7 @@ class MapView(PermissionRequiredMixin, View):
             if vlan:  # Guard: Only filter if VLAN selected
                 interfaces = interfaces.filter(Q(untagged_vlan=vlan) | Q(tagged_vlans=vlan))
             devices = Device.objects.filter(interfaces__in=interfaces).distinct().prefetch_related(
-                Prefetch('custom_field_values', to_attr='cf_values'),  # Perf for geo CF
+                'custom_field_values__custom_field',  # FIXED: Proper prefetch for custom fields (avoids N+1)
                 'device_role',  # For role checks
             )
             if device_roles := form.cleaned_data['device_roles']:
@@ -38,7 +38,7 @@ class MapView(PermissionRequiredMixin, View):
             map_data = configure_leaflet_map(
                 "geomap", geolocated_devices, form.cleaned_data['calculate_connections']
             )
-            map_data['vlan'] = vlan.id if vlan else None  # FIXED: Prevents None.id crash
+            map_data['vlan'] = vlan.id if vlan else None  # VLAN guard (prevents None.id crash)
             return render(request, self.template_name, context=dict(
                 filter_form=form, map_data=map_data, non_geolocated_devices=non_geolocated_devices
             ))
