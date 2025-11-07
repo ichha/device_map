@@ -1,86 +1,94 @@
-{% extends 'base/layout.html' %}
-{% load static %}
+{% extends 'base.html' %}
+{% load helpers %}
 
-{% block title %}Device map{% endblock %}
-
-{% block head %}
-    {# Leaflet #}
-    <link rel="stylesheet" href="{% static 'netbox_device_map/leaflet/leaflet.css' %}">
-    <script src="{% static 'netbox_device_map/leaflet/leaflet.js' %}"></script>
-    {# Leaflet plugins #}
-    <link rel="stylesheet" href="{% static 'netbox_device_map/leaflet.fullscreen/Control.FullScreen.css' %}">
-    <script src="{% static 'netbox_device_map/leaflet.fullscreen/Control.FullScreen.js' %}"></script>
-    <script src="{% static 'netbox_device_map/js/svg-icon.js' %}"></script>
-    <link rel="stylesheet" href="{% static 'netbox_device_map/leaflet-sidebar/L.Control.Sidebar.css' %}">
-    <script src="{% static 'netbox_device_map/leaflet-sidebar/L.Control.Sidebar.js' %}"></script>
-    <link rel="stylesheet" href="{% static 'netbox_device_map/leaflet.markercluster/MarkerCluster.css' %}">
-    <link rel="stylesheet" href="{% static 'netbox_device_map/leaflet.markercluster/MarkerCluster.Default.css' %}">
-    <script src="{% static 'netbox_device_map/leaflet.markercluster/leaflet.markercluster.js' %}"></script>
-
-    <link rel="stylesheet" href="{% static 'netbox_device_map/style.css' %}">
-{% endblock %}
+{% block title %}Device Map{% endblock %}
 
 {% block content %}
-    <ul class="nav nav-tabs px-3">
-        <li class="nav-item" role="presentation">
-            <button class="nav-link active" id="map-tab" data-bs-toggle="tab" data-bs-target="#map"
-                    type="button" role="tab" aria-controls="map" aria-selected="true">
-                Geographical map
-                {% if map_data %}<span class="badge bg-secondary">{{ map_data.markers|length }}</span>{% endif %}
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="filters-form-tab" data-bs-toggle="tab" data-bs-target="#filters-form"
-                    type="button" role="tab" aria-controls="filters-form" aria-selected="true">
-                Filters
-            </button>
-        </li>
-    </ul>
-    <div class="tab-content">
-        <div class="tab-pane active" id="map" role="tabpanel" aria-labelledby="map-tab">
-            {% if map_data %}
-                <div class="mb-3">
-                    {% if non_geolocated_devices %}
-                        <p>
-                            <a class="btn btn-sm btn-outline-secondary text-toggle" data-bs-toggle="collapse"
-                               href="#notShownDevices"
-                               role="button" aria-expanded="false" aria-controls="collapseExample">
-                                <span class="text-collapsed">Show</span>
-                                <span class="text-expanded">Hide</span>
-                                devices are not geolocated ({{ non_geolocated_devices|length }})
-                            </a>
-                        </p>
-                        <div class="collapse" id="notShownDevices">
-                            <div class="card card-body">
-                                <ul>
-                                    {% for device in non_geolocated_devices %}
-                                        <li>
-                                            <a href="{{ device.get_absolute_url }}"
-                                               target="_blank">{{ device.name }}</a>
-                                            <span class="separator">·</span>
-                                            <span class="text-muted">{{ device.device_role.name }}</span>
-                                        </li>
-                                    {% endfor %}
-                                </ul>
-                            </div>
-                        </div>
-                    {% endif %}
+<div class="row">
+    <div class="col-md-12">
+        <form method="get" class="form form-horizontal">
+            {% csrf_token %}
+            {% include 'forms/form_generic.html' with form=filter_form %}
+            <div class="form-group">
+                <div class="col-sm-offset-3 col-sm-9">
+                    <button type="submit" class="btn btn-primary">Filter Map</button>
                 </div>
-                <div id="{{ map_data.map_id }}" style="height: 700px"></div>
-                <div id="map-sidebar">
-                    <div class="h3 sidebar-device-name"></div>
-                    <div class="h6 sidebar-device-type"></div>
-                    <div class="h5 sidebar-device-role"></div>
-                    <div class="sidebar-cpe-list"></div>
-                </div>
-                {{ map_data|json_script:"map-data" }}
-                <script src="{% static 'netbox_device_map/js/map.js' %}"></script>
-            {% else %}
-                Please specify filtering criteria for displaying the map
-            {% endif %}
-        </div>
-        <div class="tab-pane" id="filters-form" role="tabpanel" aria-labelledby="filters-form-tab">
-            {% include 'inc/filter_list.html' %}
-        </div>
+            </div>
+        </form>
+
+        {% if non_geolocated_devices %}
+            <div class="alert alert-warning">
+                <h4>Devices Without Locations</h4>
+                <ul>
+                    {% for device in non_geolocated_devices %}
+                        <li><a href="{{ device.get_absolute_url }}">{{ device.name }}</a> ({{ device.site.name|default:"No Site" }})</li>
+                    {% endfor %}
+                </ul>
+                <p>Add geolocation data to plot them!</p>
+            </div>
+        {% endif %}
+
+        <div id="geomap" style="height: 600px; width: 100%; border: 1px solid #ccc;"></div>
     </div>
+</div>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+const mapData = {{ map_data|safe }};
+const map = L.map(mapData.map_id).setView([40.7128, -74.0060], 10);
+
+L.tileLayer(mapData.tiles.url_template, {
+    attribution: mapData.attribution,
+    subdomains: mapData.tiles.options.subdomains,
+    crs: L.CRS[mapData.crs]
+}).addTo(map);
+
+const iconCache = {};
+mapData.markers.forEach(marker => {
+    let icon;
+    if (!iconCache[marker.icon]) {
+        const iconClass = marker.icon === 'cpe' ? 'fa fa-wifi' : 'fa fa-server';
+        icon = L.divIcon({ className: 'custom-div-icon', html: `<i class="${iconClass}"></i>`, iconSize: [20, 20] });
+        iconCache[marker.icon] = icon;
+    } else {
+        icon = iconCache[marker.icon];
+    }
+    const deviceMarker = L.marker(marker.position, { icon: icon })
+        .bindPopup(`
+            <b>${marker.device.name}</b><br>
+            Role: ${marker.device.role}<br>
+            <a href="${marker.device.url}">View in NetBox</a><br>
+            VLAN: ${mapData.vlan || 'All'}
+        `)
+        .addTo(map);
+
+    deviceMarker.on('click', () => {
+        fetch(`/plugins/device-map/connected-cpe/${marker.device.id}/`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.status) {
+                    alert(`Connected CPEs: ${data.cpe_devices.map(d => d.name).join(', ')}`);
+                }
+            });
+    });
+});
+
+if (mapData.connections.length > 0) {
+    mapData.connections.forEach(conn => {
+        L.polyline(conn, { color: 'blue', weight: 2, opacity: 0.6 }).addTo(map);
+    });
+}
+
+if (mapData.markers.length > 0) {
+    const group = new L.featureGroup(mapData.markers.map(m => L.marker(m.position)));
+    map.fitBounds(group.getBounds().pad(0.1));
+}
+</script>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+<style>
+.custom-div-icon { background: transparent; border: none; }
+</style>
 {% endblock %}
