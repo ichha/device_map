@@ -20,16 +20,15 @@ class MapView(PermissionRequiredMixin, View):
     form = forms.DeviceMapFilterForm
 
     def get(self, request):
-        """Device map view"""
         form = self.form(request.GET)
         if form.is_valid():
             interfaces = Interface.objects.all()
             vlan = form.cleaned_data['vlan']
-            if vlan:  # Guard: Only filter if VLAN selected
+            if vlan:
                 interfaces = interfaces.filter(Q(untagged_vlan=vlan) | Q(tagged_vlans=vlan))
             devices = Device.objects.filter(interfaces__in=interfaces).distinct().prefetch_related(
-                'custom_field_values__custom_field',  # FIXED: Proper prefetch for custom fields (avoids N+1)
-                'device_role',  # For role checks
+                'custom_field_values__custom_field',
+                'device_role',
             )
             if device_roles := form.cleaned_data['device_roles']:
                 devices = devices.filter(device_role__in=device_roles)
@@ -38,7 +37,7 @@ class MapView(PermissionRequiredMixin, View):
             map_data = configure_leaflet_map(
                 "geomap", geolocated_devices, form.cleaned_data['calculate_connections']
             )
-            map_data['vlan'] = vlan.id if vlan else None  # VLAN guard (prevents None.id crash)
+            map_data['vlan'] = vlan.id if vlan else None
             return render(request, self.template_name, context=dict(
                 filter_form=form, map_data=map_data, non_geolocated_devices=non_geolocated_devices
             ))
@@ -53,7 +52,6 @@ class ConnectedCpeAjaxView(PermissionRequiredMixin, View):
     form = forms.ConnectedCpeForm
 
     def get(self, request, **kwargs):
-        """List of CPE devices connected to the specified node device"""
         try:
             device = Device.objects.get(pk=kwargs.get('pk'))
         except Device.DoesNotExist:
@@ -68,13 +66,11 @@ class ConnectedCpeAjaxView(PermissionRequiredMixin, View):
                     id=d.id,
                     name=d.name,
                     url=d.get_absolute_url(),
-                    comments=getattr(d, 'comments', '')  # Guard empty/None comments
+                    comments=getattr(d, 'comments', '')
                 )
                 for d in connected_devices_qs
             ]
-            # Sorting list of CPE devices by the sequence of integers contained in the comments
             connected_devices.sort(key=lambda d: tuple(int(n) for n in INTEGER_REGEXP.findall(d['comments'] or '')))
-            # Guard for missing device_type/manufacturer
             manuf = getattr(device.device_type.manufacturer, 'name', 'Unknown') if device.device_type else 'Unknown'
             model = getattr(device.device_type, 'model', 'Unknown') if device.device_type else 'Unknown'
             device_type = f"{manuf} {model}"
@@ -88,4 +84,4 @@ class ConnectedCpeAjaxView(PermissionRequiredMixin, View):
                 'status': False,
                 'error': 'Form fields filled out incorrectly',
                 'form_errors': form.errors
-            }, status=400)  # Better: 400 for invalid input
+            }, status=400)
