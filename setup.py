@@ -16,7 +16,7 @@ setup(
     url='https://github.com/drygdryg/netbox-plugin-device-map',
     download_url=f'https://github.com/drygdryg/netbox-plugin-device-map/archive/v{version}.zip',
     python_requires='>=3.10',
-    install_requires=['netbox>=4.0'],
+    install_requires=[],
     classifiers=[
         'Environment :: Plugins',
         'Environment :: Web Environment',
