@@ -5,6 +5,12 @@ from utilities.forms.fields import DynamicModelChoiceField, DynamicModelMultiple
 
 
 class DeviceMapFilterForm(forms.Form):
+    site = DynamicModelChoiceField(  
+        queryset=Site.objects.all(),
+        required=False,
+        label="Site",
+        help_text="Filter devices by site location"
+    )
     vlan_group = DynamicModelChoiceField(
         queryset=VLANGroup.objects.all(),
         required=False,
