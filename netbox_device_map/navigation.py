@@ -1,12 +1,9 @@
-from netbox.plugins import PluginMenuItem
-from netbox.navigation import create_menu_items
+from extras.plugins import PluginMenuItem
+
 
 menu_items = (
     PluginMenuItem(
-        link='plugins:device_map:map',
-        link_text='Device Map',
-        permissions=('dcim.view_device',),
+        link='plugins:netbox_device_map:map',
+        link_text='Device map',
     ),
 )
-
-create_menu_items('plugins', menu_items)
