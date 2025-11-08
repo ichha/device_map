@@ -1,9 +1,12 @@
 from django import forms
-from dcim.models import DeviceRole
+
+from dcim.models import DeviceRole, Device
 from ipam.models import VLANGroup, VLAN
+from utilities.forms import BootstrapMixin
 from utilities.forms.fields import DynamicModelChoiceField, DynamicModelMultipleChoiceField
 
-class DeviceMapFilterForm(forms.Form):
+
+class DeviceMapFilterForm(BootstrapMixin, forms.Form):
     vlan_group = DynamicModelChoiceField(
         queryset=VLANGroup.objects.all(),
         required=False,
@@ -13,7 +16,6 @@ class DeviceMapFilterForm(forms.Form):
     vlan = DynamicModelChoiceField(
         queryset=VLAN.objects.all(),
         label="VLAN",
-        required=False,
         help_text="Filter devices by VLAN attached to any device interface",
         query_params={"group_id": "$vlan_group"}
     )
@@ -29,8 +31,6 @@ class DeviceMapFilterForm(forms.Form):
         initial=True
     )
 
+
 class ConnectedCpeForm(forms.Form):
-    vlan = forms.ModelChoiceField(
-        queryset=VLAN.objects.all(),
-        required=False
-    )
+    vlan = forms.ModelChoiceField(queryset=VLAN.objects.all(), required=False)
