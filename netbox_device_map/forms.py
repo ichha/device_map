@@ -1,5 +1,5 @@
 from django import forms
-from dcim.models import DeviceRole
+from dcim.models import DeviceRole, Site
 from ipam.models import VLANGroup, VLAN
 from utilities.forms.fields import DynamicModelChoiceField, DynamicModelMultipleChoiceField
 
