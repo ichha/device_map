@@ -1,39 +1,81 @@
-from dcim.models import Device
-
+from dcim.models import Device, Site, Cable
 from .settings import plugin_settings
-from .helpers import get_connected_devices, LatLon
-
+from .helpers import get_device_location, LatLon
 
 geomap_settings = plugin_settings['geomap_settings']
-CPE_DEVICE_ROLE_NAME = plugin_settings['cpe_device_role']
 
 
-def configure_leaflet_map(map_id: str, devices: dict[Device, LatLon], calculate_connections=True) -> dict:
-    """Generate Leaflet map of devices and the connections between them.
-    :param map_id: initialize the map on the div with this id
-    :param devices: list of target devices to display on the map
-    :param calculate_connections: calculate connections between devices
+def configure_leaflet_map(map_id: str, devices: dict[Device, LatLon] | None = None, calculate_connections=True) -> dict:
     """
-    device_id_to_latlon = {device.id: position for device, position in devices.items()}
+    Generate a Leaflet map showing sites, devices, and cable connections.
+    :param map_id: initialize the map on the div with this id
+    :param devices: dictionary of Device -> (latitude, longitude)
+    :param calculate_connections: include cables between devices
+    """
     map_config = dict(**geomap_settings, map_id=map_id)
     markers: list[dict] = []
-    connections: set[frozenset[LatLon, LatLon]] = set()
-    for device, position in devices.items():
+    connections: set[tuple[LatLon, LatLon]] = set()
+
+    # --- Add Site markers ---
+    for site in Site.objects.exclude(latitude=None).exclude(longitude=None):
+        markers.append(dict(
+            position=(site.latitude, site.longitude),
+            icon="site",
+            type="site",
+            site=dict(
+                id=site.id,
+                name=site.name,
+                url=site.get_absolute_url(),
+            )
+        ))
+
+    # --- Add Device markers ---
+    devices_with_loc = {}
+    all_devices = Device.objects.prefetch_related("site", "role")
+    for device in all_devices:
+        # Get coordinates: from custom field or site fallback
+        if location := get_device_location(device):
+            devices_with_loc[device] = location
+        elif device.site and device.site.latitude and device.site.longitude:
+            devices_with_loc[device] = (device.site.latitude, device.site.longitude)
+        else:
+            continue  # Skip devices with no location
+
+        position = devices_with_loc[device]
         markers.append(dict(
             position=position,
-            icon=device.device_role.slug,
+            icon=device.role.slug if device.role else "unknown",
+            type="device",
             device=dict(
                 id=device.id,
                 name=device.name,
+                site=device.site.name if device.site else "No Site",
                 url=device.get_absolute_url(),
-                role=device.device_role.name
+                role=device.role.name if device.role else "Unknown"
             )
         ))
-        if calculate_connections:
-            for peer_device_id in get_connected_devices(device).values_list('id', flat=True).order_by():
-                if peer_position := device_id_to_latlon.get(peer_device_id):
-                    connections.add(frozenset((position, peer_position)))
 
-    map_config.update(markers=markers, connections=[tuple(c) for c in connections])
+    # --- Add Cable connections (device to device) ---
+    if calculate_connections:
+        for cable in Cable.objects.select_related("termination_a", "termination_b"):
+            try:
+                dev_a = getattr(cable.termination_a, "device", None)
+                dev_b = getattr(cable.termination_b, "device", None)
+                if not dev_a or not dev_b:
+                    continue
+
+                pos_a = devices_with_loc.get(dev_a) or get_device_location(dev_a)
+                pos_b = devices_with_loc.get(dev_b) or get_device_location(dev_b)
+
+                if pos_a and pos_b:
+                    connections.add((pos_a, pos_b))
+            except Exception:
+                continue  # skip malformed cables
+
+    # --- Update map configuration ---
+    map_config.update(
+        markers=markers,
+        connections=list(connections)
+    )
 
     return map_config
