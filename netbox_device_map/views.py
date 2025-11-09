@@ -17,7 +17,12 @@ INTEGER_REGEXP = re.compile(r'\d+')
 
 
 class MapView(PermissionRequiredMixin, View):
-    permission_required = ('ipam.view_vlan', 'dcim.view_device', 'dcim.view_devicerole', 'dcim.view_cable')
+    permission_required = (
+        'ipam.view_vlan',
+        'dcim.view_device',
+        'dcim.view_devicerole',
+        'dcim.view_cable',
+    )
     template_name = 'netbox_device_map/main.html'
     form = forms.DeviceMapFilterForm
 
@@ -28,23 +33,41 @@ class MapView(PermissionRequiredMixin, View):
             interfaces = Interface.objects.all()
             vlan = form.cleaned_data['vlan']
 
+            # Filter interfaces belonging to selected VLAN
             interfaces = interfaces.filter(Q(untagged_vlan=vlan) | Q(tagged_vlans=vlan))
             devices = Device.objects.filter(interfaces__in=interfaces).distinct()
-            if device_roles := form.cleaned_data['device_roles']:
-                devices = devices.filter(device_role__in=device_roles)
 
+            # ✅ Updated for NetBox 4.x — replaced device_role with role
+            if device_roles := form.cleaned_data['device_roles']:
+                devices = devices.filter(role__in=device_roles)
+
+            # Gather geolocated vs non-geolocated devices
             geolocated_devices = {d: coords for d in devices if (coords := get_device_location(d))}
             non_geolocated_devices = set(devices) - set(geolocated_devices.keys())
 
-            map_data = configure_leaflet_map("geomap", geolocated_devices, form.cleaned_data['calculate_connections'])
+            # Build map configuration
+            map_data = configure_leaflet_map(
+                "geomap",
+                geolocated_devices,
+                form.cleaned_data['calculate_connections'],
+            )
             map_data['vlan'] = vlan.id
-            return render(request, self.template_name, context=dict(
-                filter_form=form, map_data=map_data, non_geolocated_devices=non_geolocated_devices
-            ))
 
+            return render(
+                request,
+                self.template_name,
+                context=dict(
+                    filter_form=form,
+                    map_data=map_data,
+                    non_geolocated_devices=non_geolocated_devices,
+                ),
+            )
+
+        # If form invalid, render page with existing filters
         return render(
-            request, self.template_name,
-            context=dict(filter_form=self.form(initial=request.GET))
+            request,
+            self.template_name,
+            context=dict(filter_form=self.form(initial=request.GET)),
         )
 
 
@@ -58,17 +81,41 @@ class ConnectedCpeAjaxView(PermissionRequiredMixin, View):
             device = Device.objects.get(pk=kwargs.get('pk'))
         except Device.DoesNotExist:
             return JsonResponse({'status': False, 'error': 'Device not found'}, status=404)
+
         form = self.form(request.GET)
         if form.is_valid():
             data = form.cleaned_data
-            connected_devices_qs = get_connected_devices(device, vlan=data['vlan'])\
-                .filter(device_role__name=plugin_settings['cpe_device_role']).order_by()
-            connected_devices = [dict(id=d.id, name=d.name, url=d.get_absolute_url(), comments=d.comments)
-                                 for d in connected_devices_qs]
-            # Sorting list of CPE devices by the sequence of integers contained in the comments
-            connected_devices.sort(key=lambda d: tuple(int(n) for n in INTEGER_REGEXP.findall(d['comments'])))
-            return JsonResponse(dict(status=True, cpe_devices=connected_devices,
-                                     device_type=f'{device.device_type.manufacturer.name} {device.device_type.model}'))
-        else:
-            return JsonResponse({'status': False, 'error': 'Form fields filled out incorrectly',
-                                 'form_errors': form.errors}, status=404)
+
+            # ✅ Updated for NetBox 4.x — replaced device_role with role
+            connected_devices_qs = (
+                get_connected_devices(device, vlan=data['vlan'])
+                .filter(role__name=plugin_settings['cpe_device_role'])
+                .order_by()
+            )
+
+            connected_devices = [
+                dict(id=d.id, name=d.name, url=d.get_absolute_url(), comments=d.comments)
+                for d in connected_devices_qs
+            ]
+
+            # Sort CPE list by any numbers appearing in comments
+            connected_devices.sort(
+                key=lambda d: tuple(int(n) for n in INTEGER_REGEXP.findall(d['comments']))
+            )
+
+            return JsonResponse(
+                dict(
+                    status=True,
+                    cpe_devices=connected_devices,
+                    device_type=f'{device.device_type.manufacturer.name} {device.device_type.model}',
+                )
+            )
+
+        return JsonResponse(
+            {
+                'status': False,
+                'error': 'Form fields filled out incorrectly',
+                'form_errors': form.errors,
+            },
+            status=404,
+        )
