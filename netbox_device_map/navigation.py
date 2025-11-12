@@ -3,7 +3,7 @@ from netbox.plugins import PluginMenuItem
 
 menu_items = (
     PluginMenuItem(
-        link='plugins:netbox_device_map:map',
-        link_text='Device map',
+        link='https://netbox.ntc.net.np/extras/image-attachments/',
+        link_text='Image Attachments',
     ),
 )
